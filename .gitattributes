@@ -1,0 +1,3 @@
+# SQL scripts are checksummed by deploy-db.ps1, so their bytes must be identical
+# on every machine. Force LF on checkout regardless of core.autocrlf.
+*.sql text eol=lf
