@@ -1,0 +1,68 @@
+# Azure DevOps pipeline, triggered by pushes/merges to main in the GitHub repository.
+# Requires:
+#   - Agent pools "pool-dev" and "pool-prd" (self-hosted agents with sqlcmd installed)
+#   - Variable groups "db-dev-secrets" and "db-prd-secrets", each containing the secret variable DB_PASSWORD
+#   - Environments "dev" and "prd" (add an Approval check on "prd")
+
+trigger:
+  branches:
+    include: [main]
+  paths:
+    include: [db/**, scripts/**]
+
+variables:
+  databaseName: AppDb
+  scriptsPath: $(Build.SourcesDirectory)/db/scripts
+
+stages:
+  - stage: DEV
+    displayName: Deploy to DEV
+    variables:
+      - group: db-dev-secrets
+    jobs:
+      - deployment: deploy_dev
+        pool:
+          name: pool-dev
+        environment: dev
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - checkout: self
+                - task: PowerShell@2
+                  displayName: Apply SQL scripts (DEV)
+                  inputs:
+                    targetType: filePath
+                    filePath: scripts/deploy-db.ps1
+                    arguments: >-
+                      -Server "localhost,14331" -Database "$(databaseName)" -User "sa"
+                      -ScriptsPath "$(scriptsPath)" -Environment "DEV"
+                  env:
+                    DB_PASSWORD: $(DB_PASSWORD)
+
+  - stage: PRD
+    displayName: Deploy to PRD
+    dependsOn: DEV
+    condition: succeeded()
+    variables:
+      - group: db-prd-secrets
+    jobs:
+      - deployment: deploy_prd
+        pool:
+          name: pool-prd
+        environment: prd          # manual approval configured on this environment
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - checkout: self
+                - task: PowerShell@2
+                  displayName: Apply SQL scripts (PRD)
+                  inputs:
+                    targetType: filePath
+                    filePath: scripts/deploy-db.ps1
+                    arguments: >-
+                      -Server "localhost,14332" -Database "$(databaseName)" -User "sa"
+                      -ScriptsPath "$(scriptsPath)" -Environment "PRD"
+                  env:
+                    DB_PASSWORD: $(DB_PASSWORD)

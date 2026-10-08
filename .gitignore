@@ -1,0 +1,14 @@
+# Secrets - never commit
+.env
+*.pat
+*.secret
+
+# Azure Pipelines agent folders (if placed inside the repo)
+_work/
+_diag/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
