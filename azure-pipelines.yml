@@ -1,8 +1,14 @@
 # Azure DevOps pipeline, triggered by pushes/merges to main in the GitHub repository.
+#
+# Flow: HML (automatic) -> PRD (manual approval). DEV is the developers' playground and is NOT
+# deployed by this pipeline.
+#
 # Requires:
-#   - Agent pools "pool-dev" and "pool-prd" (self-hosted agents with sqlcmd installed)
-#   - Variable groups "db-dev-secrets" and "db-prd-secrets", each containing the secret variable DB_PASSWORD
-#   - Environments "dev" and "prd" (add an Approval check on "prd")
+#   - Agent pools "pool-dev" (agent on server A, which hosts DEV + HML) and "pool-prd" (agent on server B)
+#   - Variable groups "db-hml-secrets" and "db-prd-secrets", each with the secret variable DB_PASSWORD
+#   - Environments "hml" and "prd" (add an Approval check on "prd")
+#
+# Per-client values live in the "variables" block of each stage (dbServer, dbName).
 
 trigger:
   branches:
@@ -11,46 +17,53 @@ trigger:
     include: [db/**, scripts/**]
 
 variables:
-  databaseName: AppDb
   scriptsPath: $(Build.SourcesDirectory)/db/scripts
 
 stages:
-  - stage: DEV
-    displayName: Deploy to DEV
+  - stage: HML
+    displayName: Deploy to HML
     variables:
-      - group: db-dev-secrets
+      - group: db-hml-secrets
+      - name: dbServer
+        value: localhost,14331      # server A (hosts DEV and HML)
+      - name: dbName
+        value: AppDb_HML
     jobs:
-      - deployment: deploy_dev
+      - deployment: deploy_hml
         pool:
           name: pool-dev
-        environment: dev
+        environment: hml
         strategy:
           runOnce:
             deploy:
               steps:
                 - checkout: self
                 - task: PowerShell@2
-                  displayName: Apply SQL scripts (DEV)
+                  displayName: Apply SQL scripts (HML)
                   inputs:
                     targetType: filePath
                     filePath: scripts/deploy-db.ps1
                     arguments: >-
-                      -Server "localhost,14331" -Database "$(databaseName)" -User "sa"
-                      -ScriptsPath "$(scriptsPath)" -Environment "DEV"
+                      -Server "$(dbServer)" -Database "$(dbName)" -User "sa"
+                      -ScriptsPath "$(scriptsPath)" -Environment "HML"
                   env:
                     DB_PASSWORD: $(DB_PASSWORD)
 
   - stage: PRD
     displayName: Deploy to PRD
-    dependsOn: DEV
+    dependsOn: HML
     condition: succeeded()
     variables:
       - group: db-prd-secrets
+      - name: dbServer
+        value: localhost,14332      # server B
+      - name: dbName
+        value: AppDb
     jobs:
       - deployment: deploy_prd
         pool:
           name: pool-prd
-        environment: prd          # manual approval configured on this environment
+        environment: prd            # manual approval configured on this environment
         strategy:
           runOnce:
             deploy:
@@ -62,7 +75,7 @@ stages:
                     targetType: filePath
                     filePath: scripts/deploy-db.ps1
                     arguments: >-
-                      -Server "localhost,14332" -Database "$(databaseName)" -User "sa"
+                      -Server "$(dbServer)" -Database "$(dbName)" -User "sa"
                       -ScriptsPath "$(scriptsPath)" -Environment "PRD"
                   env:
                     DB_PASSWORD: $(DB_PASSWORD)
