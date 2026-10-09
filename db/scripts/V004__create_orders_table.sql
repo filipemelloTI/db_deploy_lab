@@ -10,4 +10,3 @@ CREATE TABLE dbo.customer_order (
 );
 
 COMMIT;
--- edited after being applied (test)a
