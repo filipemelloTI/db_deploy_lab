@@ -16,6 +16,8 @@ trigger:
   paths:
     include: [db/**, scripts/**]
 
+pr: none
+
 variables:
   scriptsPath: $(Build.SourcesDirectory)/db/scripts
 
